@@ -1,46 +1,33 @@
-# Java Gradle CircleCI 2.0 configuration file
-# See: https://circleci.com/docs/2.0/language-java/
-version: 2
-
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
-jobs:
-  build:
-    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
-    docker:
-      # specify the version you desire here
-      - image: circleci/openjdk:8-jdk
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
-
-    working_directory: ~/repo
-
-    environment:
-      # Customize the JVM maximum heap limit
-      JVM_OPTS: -Xmx3200m
-      TERM: dumb
-    # Add steps to the job
-    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
-    steps:
-      - checkout
-
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-            - v1-dependencies-{{ checksum "build.gradle" }}
-            # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
-
-      - run: gradle dependencies
-
-      - save_cache:
-          paths:
-            - ~/.gradle
-          key: v1-dependencies-{{ checksum "build.gradle" }}
-
-      # run tests!
-      - run: gradle test
+version: 2.1 # use CircleCI 2.1
+jobs: # a collection of steps
+  build: # runs not using Workflows must have a `build` job as entry point
+    working_directory: ~/APIAutomation/Project1 # directory where steps will run
+    docker: # run the steps with Docker
+      - image: circleci/openjdk:8-jdk-stretch # ...with this image as the primary container; this is where all `steps` will run
+    steps: # a collection of executable commands
+        - checkout # check out source code to working directory
+        - restore_cache: # restore the saved cache after the first run or if `pom.xml` has changed
+            # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
+            key: APIAutomation/Project1/-{{ checksum "pom.xml" }}
+        - run: mvn dependency:go-offline # gets the project dependencies
+        - save_cache: # saves the project dependencies
+            paths:
+              - ~/.m2
+            key: APIAutomation-{{ checksum "pom.xml" }}
+        - run: mvn clean install -B -DcloudName=${cloudName}  -DsecurityToken=${securityToken} -Dreportium-job-name=${CIRCLE_PROJECT_REPONAME} -Dreportium-job-number=${CIRCLE_BUILD_NUM} -Dreportium-job-branch=${CIRCLE_BRANCH} -Dreportium-tags="test"
+        - run: echo "API Suite Report- https://${cloudName}.reporting.perfectomobile.com/library?jobName[0]=${CIRCLE_PROJECT_REPONAME}&jobNumber[0]=${CIRCLE_BUILD_NUM}"
+workflows: # The following yaml will schedule this maven build operation to run every day at 12:00am UTC
+  version: 2
+  commit:
+    jobs:
+      - build
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master      
+    jobs:
+      - build
